@@ -15,17 +15,17 @@ import {
 // Reference data: 2026 CMS Physician Fee Schedule, time-based office/outpatient E/M
 // ---------------------------------------------------------------------------
 const NEW_CODES = [
-  { level: 2, code: "99202", wrvu: 0.93, minTime: 15, maxTime: 29 },
-  { level: 3, code: "99203", wrvu: 1.6, minTime: 30, maxTime: 44 },
-  { level: 4, code: "99204", wrvu: 2.6, minTime: 45, maxTime: 59 },
-  { level: 5, code: "99205", wrvu: 3.5, minTime: 60, maxTime: 74 },
+  { level: 2, code: "99202", wrvu: 0.93, minTime: 15, maxTime: 29, mdm: "Straightforward" },
+  { level: 3, code: "99203", wrvu: 1.6, minTime: 30, maxTime: 44, mdm: "Low" },
+  { level: 4, code: "99204", wrvu: 2.6, minTime: 45, maxTime: 59, mdm: "Moderate" },
+  { level: 5, code: "99205", wrvu: 3.5, minTime: 60, maxTime: 74, mdm: "High" },
 ];
 
 const EST_CODES = [
-  { level: 2, code: "99212", wrvu: 0.7, minTime: 10, maxTime: 19 },
-  { level: 3, code: "99213", wrvu: 1.3, minTime: 20, maxTime: 29 },
-  { level: 4, code: "99214", wrvu: 1.92, minTime: 30, maxTime: 39 },
-  { level: 5, code: "99215", wrvu: 2.8, minTime: 40, maxTime: 54 },
+  { level: 2, code: "99212", wrvu: 0.7, minTime: 10, maxTime: 19, mdm: "Straightforward" },
+  { level: 3, code: "99213", wrvu: 1.3, minTime: 20, maxTime: 29, mdm: "Low" },
+  { level: 4, code: "99214", wrvu: 1.92, minTime: 30, maxTime: 39, mdm: "Moderate" },
+  { level: 5, code: "99215", wrvu: 2.8, minTime: 40, maxTime: 54, mdm: "High" },
 ];
 
 const levelKeys = [2, 3, 4, 5];
@@ -220,18 +220,25 @@ function MixTable({ title, mix, onChange, codeTable, accent }) {
         <tbody>
           {codeTable.map((row) => (
             <tr key={row.code} className="border-b border-stone-100">
-              <td className="py-1.5 text-slate-700">L{row.level}</td>
-              <td className="py-1.5 text-slate-500">{row.code}</td>
-              <td className="py-1.5 text-right">
+              <td className="py-1.5 text-slate-700 align-top">L{row.level}</td>
+              <td className="py-1.5 text-slate-500 align-top">
+                {row.code}
+                <div className="text-xs text-slate-400 font-normal leading-snug">
+                  {row.mdm} MDM
+                  <br />
+                  {row.minTime}–{row.maxTime} min
+                </div>
+              </td>
+              <td className="py-1.5 text-right align-top">
                 <PercentInput
                   value={mix[row.level]}
                   onChange={(v) => onChange({ ...mix, [row.level]: v })}
                 />
               </td>
-              <td className="py-1.5 text-right tabular-nums text-slate-500">
+              <td className="py-1.5 text-right tabular-nums text-slate-500 align-top">
                 {row.wrvu.toFixed(2)}
               </td>
-              <td className="py-1.5 text-right tabular-nums text-slate-700">
+              <td className="py-1.5 text-right tabular-nums text-slate-700 align-top">
                 {(row.wrvu * (Number(mix[row.level]) || 0)).toFixed(2)}
               </td>
             </tr>
@@ -425,6 +432,7 @@ function ReferenceTab() {
           <tr className="text-left text-slate-500 border-b border-stone-200">
             <th className="py-2 font-normal">CPT</th>
             <th className="py-2 font-normal">Descriptor</th>
+            <th className="py-2 font-normal">Medical decision making</th>
             <th className="py-2 font-normal text-right">Total time (date of encounter)</th>
             <th className="py-2 font-normal text-right">Work RVU</th>
           </tr>
@@ -442,6 +450,7 @@ function ReferenceTab() {
               <td className="py-1.5 text-slate-600">
                 {i < 4 ? "New patient" : "Established patient"}, Level {r.level}
               </td>
+              <td className="py-1.5 text-slate-600">{r.mdm}</td>
               <td className="py-1.5 text-right tabular-nums text-slate-600">
                 {r.minTime}–{r.maxTime} min
               </td>
@@ -1104,7 +1113,6 @@ export default function App() {
       <header className="border-b border-stone-200 bg-white print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-5 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-xs text-slate-400">Pediatric Gastroenterology</div>
             <h1 className="font-serif text-2xl text-slate-900">
               Clinic Production Model
             </h1>
