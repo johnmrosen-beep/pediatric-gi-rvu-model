@@ -57,10 +57,10 @@ function defaultClinic(kind) {
       slotMinutes: 30,
       newShare: 0.5,
       alwaysFollowUp: false,
-      newMix: defaultMix(0.05, 0.45, 0.4, 0.1),
-      followUpMix: defaultMix(0.05, 0.45, 0.4, 0.1),
-      newNoShowRate: 0.15,
-      followUpNoShowRate: 0.08,
+      newMix: defaultMix(0, 0, 0, 0),
+      followUpMix: defaultMix(0, 0, 0, 0),
+      newNoShowRate: 0,
+      followUpNoShowRate: 0,
       prolongedUnitsPerMonth: 0,
     };
   }
@@ -69,10 +69,10 @@ function defaultClinic(kind) {
     slotMinutes: 60,
     newShare: 0,
     alwaysFollowUp: true,
-    newMix: defaultMix(0.05, 0.45, 0.4, 0.1),
-    followUpMix: defaultMix(0.05, 0.4, 0.45, 0.1),
-    newNoShowRate: 0.15,
-    followUpNoShowRate: 0.1,
+    newMix: defaultMix(0, 0, 0, 0),
+    followUpMix: defaultMix(0, 0, 0, 0),
+    newNoShowRate: 0,
+    followUpNoShowRate: 0,
     prolongedUnitsPerMonth: 0,
   };
 }
