@@ -6,16 +6,16 @@ doesn't carry over automatically. Read this before making changes.
 
 ## What this is
 
-A client-only web tool for UAMS Pediatric Gastroenterology to model
+A client-only web tool  to model
 professional wRVU production across two clinic templates — a general
 clinic and a second, independently-configurable "specialty" clinic (named
 "Motility" by default, but the label, slot length, and every assumption
 are editable so it can represent any second clinic type). Built to support
-practice-plan / clinic-strategy conversations with department leadership.
+practice-plan / clinic-strategy conversations within the group.
 
 **This is Model 1**: professional wRVU production only, optimized around
 time-based E/M billing for all-telehealth visits. Facility RVU and total
-(direct + downstream) revenue are explicitly out of scope until UAMS
+(direct + downstream) revenue are explicitly out of scope until
 revenue cycle confirms the clinic's provider-based billing status for
 telehealth — see the in-app disclaimer on the Production Model tab.
 
@@ -92,12 +92,12 @@ telehealth — see the in-app disclaimer on the Production Model tab.
 - **Not pushed to GitHub, not deployed anywhere.** See README.md for the
   push sequence and hosting options (GitHub Pages / Vercel / Netlify).
 - **Facility RVU / total revenue (Model 2)** — blocked on confirming
-  UAMS's provider-based billing status for telehealth with revenue cycle.
+  provider-based billing status for telehealth with revenue cycle.
   There's a placeholder input for facility RVU/encounter on the
   Assumptions tab and disclaimers throughout flagging this is unmodeled;
   wire it in once that's confirmed rather than guessing at a number.
 - A parallel Excel workbook (`.xlsx`, not this repo) was built earlier as
-  a standalone leadership deliverable with live formulas — it is **not**
+  a standalone deliverable with live formulas — it is **not**
   in this repo and is not the same thing as the Excel *export* this app
   produces (which is a static snapshot). If asked to reconcile the two,
   check with the user about which one is meant.
