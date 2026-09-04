@@ -28,6 +28,19 @@ const EST_CODES = [
   { level: 5, code: "99215", wrvu: 2.8, minTime: 40, maxTime: 54, mdm: "High" },
 ];
 
+// Prolonged-service add-on: billable only with 99205 or 99215, once total
+// time reaches 15+ min beyond that code's threshold; repeatable per
+// additional 15 min. Unlike the level codes above, it isn't a %-of-visits
+// input (a single visit can generate multiple units), so it's handled
+// separately throughout — see clinicMetrics().
+const PROLONGED_CODE = {
+  code: "99417",
+  wrvu: 0.61,
+  increment: 15,
+  descriptor:
+    "Prolonged office/outpatient E/M, each additional 15 min (add-on to 99205 or 99215 only)",
+};
+
 const levelKeys = [2, 3, 4, 5];
 
 function defaultMix(a, b, c, d) {
@@ -48,6 +61,7 @@ function defaultClinic(kind) {
       followUpMix: defaultMix(0.05, 0.45, 0.4, 0.1),
       newNoShowRate: 0.15,
       followUpNoShowRate: 0.08,
+      prolongedUnitsPerMonth: 0,
     };
   }
   return {
@@ -59,6 +73,7 @@ function defaultClinic(kind) {
     followUpMix: defaultMix(0.05, 0.4, 0.45, 0.1),
     newNoShowRate: 0.15,
     followUpNoShowRate: 0.1,
+    prolongedUnitsPerMonth: 0,
   };
 }
 
@@ -101,7 +116,25 @@ function atRiskCodes(mix, codeTable, slotMinutes) {
   );
 }
 
-function clinicMetrics(clinic, hoursPerSession) {
+// Converts a clinic's total sessions/week share of the current baseline
+// schedule into sessions/month, so a "units billed per month" average (which
+// can't be split %-of-visits, since one visit may generate several units)
+// can be turned into a per-session rate — the same unit every other figure
+// in clinicMetrics() is expressed in. This ties the add-on rate to the
+// *current baseline* schedule mix (see "Current baseline share" on the
+// Assumptions tab), not to whatever hypothetical mix a scenario row shows;
+// like every other per-session figure here, it's then held constant while
+// the scenario table varies session counts around it.
+function sessionsPerMonthForShare(share, state) {
+  return (
+    ((Number(share) || 0) *
+      (Number(state.sessionsPerWeek) || 0) *
+      (Number(state.weeksPerYear) || 0)) /
+    12
+  );
+}
+
+function clinicMetrics(clinic, hoursPerSession, sessionsPerMonth) {
   const newBlended = blendedWrvu(clinic.newMix, NEW_CODES);
   const fuBlended = blendedWrvu(clinic.followUpMix, EST_CODES);
   const newShare = clinic.alwaysFollowUp ? 0 : Number(clinic.newShare) || 0;
@@ -112,8 +145,15 @@ function clinicMetrics(clinic, hoursPerSession) {
     : newShare * (Number(clinic.newNoShowRate) || 0) +
       (1 - newShare) * (Number(clinic.followUpNoShowRate) || 0);
   const effectiveVisits = slots * (1 - noShowRate);
-  const wrvuPerSessionTemplated = slots * overall;
-  const wrvuPerSession = effectiveVisits * overall;
+
+  const unitsPerSession =
+    sessionsPerMonth > 0
+      ? (Number(clinic.prolongedUnitsPerMonth) || 0) / sessionsPerMonth
+      : 0;
+  const prolongedWrvuPerSession = unitsPerSession * PROLONGED_CODE.wrvu;
+
+  const wrvuPerSessionTemplated = slots * overall + prolongedWrvuPerSession;
+  const wrvuPerSession = effectiveVisits * overall + prolongedWrvuPerSession;
   const wrvuPerHour = wrvuPerSession / hoursPerSession;
   return {
     newBlended,
@@ -122,6 +162,8 @@ function clinicMetrics(clinic, hoursPerSession) {
     slots,
     noShowRate,
     effectiveVisits,
+    unitsPerSession,
+    prolongedWrvuPerSession,
     wrvuPerSessionTemplated,
     wrvuPerSession,
     wrvuPerHour,
@@ -261,8 +303,8 @@ function MixTable({ title, mix, onChange, codeTable, accent }) {
   );
 }
 
-function ClinicPanel({ clinic, onChange, accentBorder, accentText, hoursPerSession }) {
-  const metrics = clinicMetrics(clinic, hoursPerSession);
+function ClinicPanel({ clinic, onChange, accentBorder, accentText, hoursPerSession, sessionsPerMonth }) {
+  const metrics = clinicMetrics(clinic, hoursPerSession, sessionsPerMonth);
   const newRisk = atRiskCodes(clinic.newMix, NEW_CODES, clinic.slotMinutes);
   const fuRisk = atRiskCodes(clinic.followUpMix, EST_CODES, clinic.slotMinutes);
   const hasRisk = !clinic.alwaysFollowUp
@@ -341,6 +383,44 @@ function ClinicPanel({ clinic, onChange, accentBorder, accentText, hoursPerSessi
 
       <div className="mt-5 pt-4 border-t border-stone-200">
         <h4 className="text-sm font-medium text-slate-700 mb-1">
+          Prolonged services add-on ({PROLONGED_CODE.code})
+        </h4>
+        <p className="text-xs text-slate-400 mb-3">
+          Add-on to 99205 or 99215 only, once total time reaches 15+ min
+          beyond that code's threshold; repeatable per additional 15 min, so
+          a single visit can generate multiple units. Entered as a
+          clinic-wide monthly average rather than a %-of-visits split, then
+          converted to a rate per session using this clinic's share of the
+          current baseline schedule (set below, under "Current baseline
+          share").
+        </p>
+        <Field label="Average units billed / month">
+          <NumberInput
+            value={clinic.prolongedUnitsPerMonth}
+            onChange={(v) => onChange({ ...clinic, prolongedUnitsPerMonth: v })}
+            step={1}
+            min={0}
+            suffix="units/mo"
+          />
+        </Field>
+        {Number(clinic.prolongedUnitsPerMonth) > 0 &&
+          (sessionsPerMonth > 0 ? (
+            <p className="text-xs text-slate-400 mt-2">
+              ≈ {metrics.unitsPerSession.toFixed(2)} units/session at{" "}
+              {num1(sessionsPerMonth)} baseline sessions/month → +
+              {metrics.prolongedWrvuPerSession.toFixed(2)} wRVU/session.
+            </p>
+          ) : (
+            <div className="mt-2 bg-amber-50 border border-amber-300 rounded-sm px-3 py-2 text-xs text-amber-800">
+              The current baseline share assumes 0 sessions/month for{" "}
+              {clinic.label} — this average can't be converted to a rate
+              until the baseline share below includes some volume here.
+            </div>
+          ))}
+      </div>
+
+      <div className="mt-5 pt-4 border-t border-stone-200">
+        <h4 className="text-sm font-medium text-slate-700 mb-1">
           Historical no-show / DNKA rate
         </h4>
         <p className="text-xs text-slate-400 mb-3">
@@ -400,6 +480,12 @@ function ClinicPanel({ clinic, onChange, accentBorder, accentText, hoursPerSessi
               / {metrics.wrvuPerSessionTemplated.toFixed(2)} templated
             </span>
           </div>
+          {metrics.prolongedWrvuPerSession > 0 && (
+            <div className="text-xs text-slate-400">
+              incl. +{metrics.prolongedWrvuPerSession.toFixed(2)} from{" "}
+              {PROLONGED_CODE.code} add-on
+            </div>
+          )}
         </div>
         <div>
           <div className="text-slate-500">wRVU / clinic hour</div>
@@ -459,6 +545,17 @@ function ReferenceTab() {
               </td>
             </tr>
           ))}
+          <tr className="bg-stone-50">
+            <td className="py-1.5 text-slate-700">{PROLONGED_CODE.code}</td>
+            <td className="py-1.5 text-slate-600">{PROLONGED_CODE.descriptor}</td>
+            <td className="py-1.5 text-slate-600">—</td>
+            <td className="py-1.5 text-right tabular-nums text-slate-600">
+              +{PROLONGED_CODE.increment} min / unit
+            </td>
+            <td className="py-1.5 text-right tabular-nums text-slate-800 font-medium">
+              {PROLONGED_CODE.wrvu.toFixed(2)}
+            </td>
+          </tr>
         </tbody>
       </table>
       <p className="text-xs text-slate-400 mt-4 leading-relaxed">
@@ -466,9 +563,12 @@ function ReferenceTab() {
         effective 1/1/2026. "Total time" includes non-face-to-face work on the
         date of the encounter (chart review, orders, documentation, care
         coordination). Telehealth E/M via 99202–99215 follows the same time
-        thresholds (modifier 95 / POS per payer policy). Verify current values
-        against the CMS PFS Look-Up Tool before use in contracts — rates can
-        change annually.
+        thresholds (modifier 95 / POS per payer policy). 99417 is an add-on
+        code only — it's never billed alone, only appended to 99205 or 99215
+        once total time clears that code's threshold by 15+ minutes, and is
+        repeatable per additional 15 minutes. Verify current values against
+        the CMS PFS Look-Up Tool before use in contracts — rates can change
+        annually.
       </p>
     </div>
   );
@@ -480,8 +580,10 @@ function ReferenceTab() {
 const SCENARIO_STEPS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
 
 function computeModel(state) {
-  const general = clinicMetrics(state.general, state.hoursPerSession);
-  const specialty = clinicMetrics(state.specialty, state.hoursPerSession);
+  const generalSessionsPerMonth = sessionsPerMonthForShare(state.baselineGeneralShare, state);
+  const specialtySessionsPerMonth = sessionsPerMonthForShare(1 - state.baselineGeneralShare, state);
+  const general = clinicMetrics(state.general, state.hoursPerSession, generalSessionsPerMonth);
+  const specialty = clinicMetrics(state.specialty, state.hoursPerSession, specialtySessionsPerMonth);
   const advantage =
     specialty.wrvuPerHour > 0 ? general.wrvuPerHour / specialty.wrvuPerHour : 0;
 
@@ -683,6 +785,7 @@ function AssumptionsTab({ state, setState }) {
           accentBorder="border-t-red-800"
           accentText="text-red-800"
           hoursPerSession={state.hoursPerSession}
+          sessionsPerMonth={sessionsPerMonthForShare(state.baselineGeneralShare, state)}
         />
         <ClinicPanel
           clinic={state.specialty}
@@ -690,6 +793,7 @@ function AssumptionsTab({ state, setState }) {
           accentBorder="border-t-teal-800"
           accentText="text-teal-800"
           hoursPerSession={state.hoursPerSession}
+          sessionsPerMonth={sessionsPerMonthForShare(1 - state.baselineGeneralShare, state)}
         />
       </div>
 
@@ -700,7 +804,7 @@ function AssumptionsTab({ state, setState }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field
             label={`Current share of sessions as ${state.general.label}`}
-            hint="vs. specialty — sets the amber baseline row"
+            hint="vs. specialty — sets the amber baseline row, and the 99417 rate above"
           >
             <PercentInput
               value={state.baselineGeneralShare}
@@ -827,6 +931,11 @@ function buildAssumptionsRows(state) {
       rows.push(["", `Level ${c.level}`, c.code, clinic.followUpMix[c.level], c.wrvu])
     );
     rows.push([]);
+    rows.push([
+      `${PROLONGED_CODE.code} (prolonged service) units billed / month`,
+      clinic.prolongedUnitsPerMonth,
+    ]);
+    rows.push([]);
   });
 
   rows.push(["Current baseline share of sessions — " + state.general.label, state.baselineGeneralShare]);
@@ -843,6 +952,12 @@ function buildReferenceRows() {
   EST_CODES.forEach((c) =>
     rows.push([c.code, `Established patient, Level ${c.level}`, `${c.minTime}–${c.maxTime} min`, c.wrvu])
   );
+  rows.push([
+    PROLONGED_CODE.code,
+    PROLONGED_CODE.descriptor,
+    `+${PROLONGED_CODE.increment} min / unit`,
+    PROLONGED_CODE.wrvu,
+  ]);
   rows.push([]);
   rows.push([
     "Source: CMS CY2026 Physician Fee Schedule Final Rule (CMS-1832-F), effective 1/1/2026. " +
@@ -861,8 +976,10 @@ function buildProductionRows(state) {
   rows.push(["Templated slots / session", general.slots, specialty.slots]);
   rows.push(["Blended no-show / DNKA rate", general.noShowRate, specialty.noShowRate]);
   rows.push(["Effective (completed) visits / session", general.effectiveVisits, specialty.effectiveVisits]);
-  rows.push(["wRVU / session (templated, pre no-show)", general.wrvuPerSessionTemplated, specialty.wrvuPerSessionTemplated]);
-  rows.push(["wRVU / session (effective, after no-show)", general.wrvuPerSession, specialty.wrvuPerSession]);
+  rows.push([`${PROLONGED_CODE.code} units / session (from monthly avg.)`, general.unitsPerSession, specialty.unitsPerSession]);
+  rows.push([`${PROLONGED_CODE.code} add-on wRVU / session`, general.prolongedWrvuPerSession, specialty.prolongedWrvuPerSession]);
+  rows.push(["wRVU / session (templated, pre no-show, incl. add-on)", general.wrvuPerSessionTemplated, specialty.wrvuPerSessionTemplated]);
+  rows.push(["wRVU / session (effective, after no-show, incl. add-on)", general.wrvuPerSession, specialty.wrvuPerSession]);
   rows.push(["wRVU / clinic hour (effective)", general.wrvuPerHour, specialty.wrvuPerHour]);
   rows.push([]);
   rows.push([`${state.general.label} wRVU/hr advantage over ${state.specialty.label}`, advantage]);
@@ -976,7 +1093,12 @@ function PrintSummary({ state }) {
             ["Blended wRVU / visit", general.overall.toFixed(2), specialty.overall.toFixed(2)],
             ["Blended no-show / DNKA rate", pctFmt(general.noShowRate), pctFmt(specialty.noShowRate)],
             ["Effective visits / session", num1(general.effectiveVisits), num1(specialty.effectiveVisits)],
-            ["wRVU / session (effective)", general.wrvuPerSession.toFixed(2), specialty.wrvuPerSession.toFixed(2)],
+            [
+              `${PROLONGED_CODE.code} add-on wRVU / session`,
+              general.prolongedWrvuPerSession.toFixed(2),
+              specialty.prolongedWrvuPerSession.toFixed(2),
+            ],
+            ["wRVU / session (effective, incl. add-on)", general.wrvuPerSession.toFixed(2), specialty.wrvuPerSession.toFixed(2)],
             ["wRVU / clinic hour (effective)", general.wrvuPerHour.toFixed(2), specialty.wrvuPerHour.toFixed(2)],
           ].map((r) => (
             <tr key={r[0]} className="border-b border-slate-200">
