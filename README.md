@@ -2,7 +2,7 @@
 
 Interactive web tool for modeling professional wRVU production across clinic
 templates (e.g., General GI vs. a specialty clinic such as Motility), built
-for UAMS Pediatric Gastroenterology practice-plan planning.
+for practice-plan planning.
 
 Three views:
 - **Assumptions** — clinic schedule, per-clinic slot length, new/follow-up
@@ -110,7 +110,7 @@ outputs static files to `dist/`):
 ## Planned next steps
 
 - Facility RVU + total (professional + facility) revenue per visit type,
-  pending confirmation of UAMS's provider-based billing status for
+  pending confirmation of provider-based billing status for
   telehealth from revenue cycle.
 - A third model layer for access/volume optimization, to weigh against pure
   RVU-production optimization.
